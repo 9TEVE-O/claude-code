@@ -1,0 +1,57 @@
+name: Update Homebrew Cask
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+
+      - name: Update cask version and checksums
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          BASE_URL="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
+
+          echo "Downloading binaries for version ${VERSION}..."
+
+          curl -fsSL "${BASE_URL}/${VERSION}/darwin-arm64/claude" -o /tmp/claude-darwin-arm64
+          curl -fsSL "${BASE_URL}/${VERSION}/darwin-x64/claude" -o /tmp/claude-darwin-x64
+          curl -fsSL "${BASE_URL}/${VERSION}/linux-x64/claude" -o /tmp/claude-linux-x64
+          curl -fsSL "${BASE_URL}/${VERSION}/linux-arm64/claude" -o /tmp/claude-linux-arm64
+
+          SHA_ARM=$(sha256sum /tmp/claude-darwin-arm64 | awk '{print $1}')
+          SHA_X86=$(sha256sum /tmp/claude-darwin-x64 | awk '{print $1}')
+          SHA_LINUX_X86=$(sha256sum /tmp/claude-linux-x64 | awk '{print $1}')
+          SHA_LINUX_ARM=$(sha256sum /tmp/claude-linux-arm64 | awk '{print $1}')
+
+          echo "darwin-arm64:  ${SHA_ARM}"
+          echo "darwin-x64:    ${SHA_X86}"
+          echo "linux-x64:     ${SHA_LINUX_X86}"
+          echo "linux-arm64:   ${SHA_LINUX_ARM}"
+
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Casks/claude-code.rb
+          sed -i "s/arm:          \"[a-f0-9]*\"/arm:          \"${SHA_ARM}\"/" Casks/claude-code.rb
+          sed -i "s/x86_64:       \"[a-f0-9]*\"/x86_64:       \"${SHA_X86}\"/" Casks/claude-code.rb
+          sed -i "s/x86_64_linux: \"[a-f0-9]*\"/x86_64_linux: \"${SHA_LINUX_X86}\"/" Casks/claude-code.rb
+          sed -i "s/arm64_linux:  \"[a-f0-9]*\"/arm64_linux:  \"${SHA_LINUX_ARM}\"/" Casks/claude-code.rb
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: Update Homebrew cask to ${{ github.event.release.tag_name }}"
+          title: "chore: Update Homebrew cask to ${{ github.event.release.tag_name }}"
+          body: |
+            Automated update of the Homebrew cask to ${{ github.event.release.tag_name }}.
+
+            This PR was created automatically by the [Update Homebrew Cask](${{ github.server_url }}/${{ github.repository }}/actions/workflows/update-homebrew-cask.yml) workflow.
+          branch: "chore/update-homebrew-cask-${{ github.event.release.tag_name }}"
+          base: main
